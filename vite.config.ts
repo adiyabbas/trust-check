@@ -9,7 +9,7 @@ export default defineConfig({
   envDir: root,
   plugins: [react()],
   resolve: {
-    alias: { '@shared': `${root}shared` },
+    alias: { '@shared': fileURLToPath(new URL('./shared', import.meta.url)) },
   },
   server: {
     port: 5173,
