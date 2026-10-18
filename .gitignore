@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+BE/data/*.db
+BE/data/*.db-journal
+.DS_Store
+*.log
+
+.netlify

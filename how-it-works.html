@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TrustCheck Architecture</title>
+<meta name="description" content="Interactive, drill-down explanation of how TrustCheck AI works: scam check, AI-writing check, rules, scoring, LLM layer, API and UI." />
+<style>
+:root {
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef1f8;
+  --text: #141821;
+  --muted: #5f687a;
+  --border: #dde2ec;
+  --primary: #2f5bea;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.07);
+  --k-actor: #0e9f6e;  --k-ui: #2f5bea;  --k-api: #0891b2;  --k-engine: #d97706;
+  --k-ai: #7c3aed;     --k-llm: #db2777; --k-data: #475569; --k-link: #ea580c;
+  --high: #d93838; --medium: #d98a0b; --low: #1f9d55;
+  --radius: 14px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1017; --surface: #151a23; --surface-2: #1d2330; --text: #e7eaf1; --muted: #9aa3b5;
+    --border: #2a3140; --primary: #7c9bff; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --k-actor: #34d399; --k-ui: #7c9bff; --k-api: #22d3ee; --k-engine: #fbbf24;
+    --k-ai: #a78bfa; --k-llm: #f472b6; --k-data: #94a3b8; --k-link: #fb923c;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1017; --surface: #151a23; --surface-2: #1d2330; --text: #e7eaf1; --muted: #9aa3b5;
+  --border: #2a3140; --primary: #7c9bff; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --k-actor: #34d399; --k-ui: #7c9bff; --k-api: #22d3ee; --k-engine: #fbbf24;
+  --k-ai: #a78bfa; --k-llm: #f472b6; --k-data: #94a3b8; --k-link: #fb923c;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
+code { font-family: var(--mono); font-size: .84em; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; }
+pre { font-family: var(--mono); font-size: .8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: .8rem; overflow-x: auto; margin: .6rem 0; line-height: 1.5; }
+a { color: var(--primary); }
+button { font: inherit; color: inherit; }
+
+/* Top bar */
+.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.top-inner { max-width: 1440px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: .7rem; margin-right: auto; }
+.logo { width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: #fff; display: grid; place-items: center; font-weight: 800; }
+.brand h1 { font-size: 1.1rem; }
+.brand p { margin: 0; font-size: .8rem; color: var(--muted); }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: transparent; padding: .35rem .85rem; border-radius: 999px; cursor: pointer; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.seg button.on { background: var(--primary); color: #fff; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: .4rem .7rem; cursor: pointer; font-size: .85rem; }
+.icon-btn:hover { border-color: var(--primary); }
+
+/* Shell */
+.shell { max-width: 1440px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .shell { grid-template-columns: 1fr; } }
+
+/* Breadcrumb */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .88rem; margin-bottom: .75rem; }
+.crumbs button { border: 0; background: none; padding: .2rem .45rem; border-radius: 7px; cursor: pointer; color: var(--primary); font-weight: 600; }
+.crumbs button:hover { background: var(--surface-2); }
+.crumbs .sep { color: var(--muted); }
+.crumbs .cur { padding: .2rem .45rem; font-weight: 700; }
+
+/* Canvas */
+.canvas { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.25rem 1.25rem 1.75rem; min-height: 70vh; position: relative; overflow: hidden; }
+.canvas::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 22px 22px; opacity: .55; pointer-events: none; }
+.level-head { position: relative; display: flex; gap: .9rem; align-items: flex-start; margin-bottom: 1.2rem; }
+.level-head .lh-icon { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 1.3rem; color: #fff; }
+.level-head h2 { font-size: 1.25rem; }
+.level-head p { margin: .2rem 0 0; color: var(--muted); max-width: 70ch; }
+.up-btn { margin-left: auto; flex: none; }
+
+.flow { position: relative; display: flex; flex-direction: column; align-items: center; }
+.flow.enter { animation: zoomIn .32s ease both; }
+.flow.leave { animation: zoomOut .32s ease both; }
+@keyframes zoomIn { from { opacity: 0; transform: scale(.94) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes zoomOut { from { opacity: 0; transform: scale(1.05) translateY(-8px); } to { opacity: 1; transform: none; } }
+
+.row { display: flex; justify-content: center; gap: 18px; width: 100%; flex-wrap: wrap; position: relative; }
+.row-label { position: relative; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin: 0 0 .4rem; background: var(--surface); padding: 0 .5rem; }
+
+.connector { position: relative; height: 38px; width: 100%; display: flex; justify-content: center; }
+.connector svg { overflow: visible; }
+.connector path { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; animation: dash 1.2s linear infinite; }
+.connector .head { fill: var(--muted); stroke: none; animation: none; }
+.connector .tag { position: absolute; top: 9px; left: calc(50% + 12px); font-size: .72rem; color: var(--muted); background: var(--surface); padding: 0 .35rem; border-radius: 6px; white-space: nowrap; font-family: var(--mono); }
+@keyframes dash { to { stroke-dashoffset: -18; } }
+@media (prefers-reduced-motion: reduce) { .connector path, .flow.enter, .flow.leave { animation: none; } }
+
+/* Node */
+.node {
+  --k: var(--k-ui);
+  position: relative; width: 236px; text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-top: 4px solid var(--k); border-radius: 12px; padding: .75rem .85rem .8rem; cursor: pointer; box-shadow: var(--shadow);
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.node:hover { transform: translateY(-2px); border-color: var(--k); }
+.node:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.node.selected { border-color: var(--k); box-shadow: 0 0 0 3px color-mix(in srgb, var(--k) 25%, transparent), var(--shadow); }
+.node .n-top { display: flex; align-items: center; gap: .55rem; }
+.node .n-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--k) 15%, transparent); color: var(--k); font-size: 1rem; flex: none; }
+.node .n-title { font-weight: 700; font-size: .95rem; line-height: 1.25; }
+.node .n-sub { font-size: .8rem; color: var(--muted); margin-top: .35rem; line-height: 1.4; }
+.node .n-foot { display: flex; justify-content: space-between; align-items: center; margin-top: .55rem; gap: .5rem; }
+.chip { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--k); }
+.drill { font-size: .72rem; font-weight: 700; color: #fff; background: var(--k); border-radius: 999px; padding: .1rem .5rem; white-space: nowrap; }
+.leaf { font-size: .72rem; color: var(--muted); }
+.k-actor { --k: var(--k-actor); } .k-ui { --k: var(--k-ui); } .k-api { --k: var(--k-api); } .k-engine { --k: var(--k-engine); }
+.k-ai { --k: var(--k-ai); } .k-llm { --k: var(--k-llm); } .k-data { --k: var(--k-data); } .k-link { --k: var(--k-link); }
+
+.legend { position: relative; display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: 1.6rem; padding-top: .9rem; border-top: 1px dashed var(--border); font-size: .78rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: .35rem; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--k); display: inline-block; }
+.hint { position: relative; text-align: center; font-size: .82rem; color: var(--muted); margin-top: 1rem; }
+
+/* Detail panel */
+.panel { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+@media (max-width: 1050px) { .panel { position: static; max-height: none; } }
+.p-head { --k: var(--primary); padding: 1rem 1.1rem .9rem; border-bottom: 1px solid var(--border); border-top: 5px solid var(--k); border-radius: var(--radius) var(--radius) 0 0; }
+.p-head .chip { display: block; margin-bottom: .25rem; }
+.p-head h3 { font-size: 1.15rem; }
+.p-head p { margin: .35rem 0 0; color: var(--muted); font-size: .9rem; }
+.p-body { padding: .9rem 1.1rem 1.2rem; font-size: .9rem; }
+.p-body h4 { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 1.1rem 0 .45rem; }
+.p-body h4:first-child { margin-top: 0; }
+.p-body p { margin: .4rem 0; }
+.p-body ul, .p-body ol { margin: .3rem 0; padding-left: 1.2rem; }
+.p-body li { margin: .2rem 0; }
+.files { display: flex; flex-wrap: wrap; gap: .35rem; }
+.files code { font-size: .78rem; }
+.p-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+.btn { border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: .45rem .8rem; cursor: pointer; font-size: .85rem; font-weight: 600; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn:hover { border-color: var(--primary); }
+
+table { width: 100%; border-collapse: collapse; font-size: .82rem; margin: .4rem 0; }
+th, td { text-align: left; padding: .35rem .45rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.sev { font-weight: 700; font-size: .78rem; }
+.sev.h { color: var(--high); } .sev.m { color: var(--medium); } .sev.l { color: var(--muted); } .sev.p { color: var(--low); }
+.callout { border-left: 3px solid var(--primary); background: var(--surface-2); padding: .55rem .75rem; border-radius: 0 8px 8px 0; margin: .6rem 0; }
+
+/* Outline view */
+.outline { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem 1.25rem; }
+body.mode-outline .outline { display: block; }
+body.mode-outline .graph-wrap { display: none; }
+.outline details { margin: .15rem 0 .15rem .2rem; }
+.outline details details { margin-left: 1.1rem; border-left: 1px dashed var(--border); padding-left: .7rem; }
+.outline summary { cursor: pointer; padding: .3rem .2rem; border-radius: 6px; list-style: none; display: flex; gap: .5rem; align-items: baseline; }
+.outline summary::-webkit-details-marker { display: none; }
+.outline summary::before { content: "▸"; color: var(--muted); width: 1em; transition: transform .15s; }
+.outline details[open] > summary::before { transform: rotate(90deg); }
+.outline summary.leaf-s::before { content: "•"; }
+.outline summary:hover { background: var(--surface-2); }
+.outline .o-title { font-weight: 650; }
+.outline .o-sub { color: var(--muted); font-size: .85rem; }
+.outline .o-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--k); flex: none; align-self: center; }
+
+footer.page-foot { max-width: 1440px; margin: 0 auto; padding: 1rem 16px 2rem; color: var(--muted); font-size: .8rem; text-align: center; }
+@media (max-width: 600px) { .node { width: 100%; } .row { gap: 12px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="logo">✓</div>
+      <div>
+        <h1>TrustCheck AI · How it works</h1>
+        <p>Click any block to open it. Keep clicking to go deeper.</p>
+      </div>
+    </div>
+    <div class="seg" role="tablist" aria-label="View">
+      <button id="v-graph" class="on" role="tab" aria-selected="true">Flow graph</button>
+      <button id="v-outline" role="tab" aria-selected="false">Full outline</button>
+    </div>
+    <button class="icon-btn" id="theme" title="Toggle theme">◐ Theme</button>
+  </div>
+</header>
+
+<main class="shell">
+  <section>
+    <div class="graph-wrap">
+      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <div class="canvas" id="canvas"></div>
+    </div>
+    <div class="outline" id="outline"></div>
+  </section>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</main>
+
+<footer class="page-foot">TrustCheck AI · college hackathon project by Ashad Abbas · Rules decide. AI explains. You verify.</footer>
+
+<script>
+/* ------------------------------------------------------------------------
+   Knowledge graph. Every node: title, kind, icon, sub (one line), body (HTML),
+   files (source paths), rows (child ids grouped into flow steps) and
+   optional edge labels between rows.
+------------------------------------------------------------------------- */
+const KIND_LABEL = { actor: 'Person', ui: 'Frontend', api: 'API', engine: 'Rule engine', ai: 'AI-writing', llm: 'LLM', data: 'Data', link: 'Links' };
+
+const N = {
+  root: {
+    title: 'TrustCheck AI', kind: 'ui', icon: '✓',
+    sub: 'End-to-end flow of one analysis, from the student to the report.',
+    rows: [['student'], ['frontend'], ['api'], ['orchestrator'], ['scam', 'aimode'], ['llm'], ['storage'], ['report']],
+    edges: ['paste / screenshot', 'POST /api/analyze', 'validate', 'route by mode', 'signals + score', 'explanations', 'AnalysisResult'],
+    body: `
+      <p>TrustCheck answers two questions with one pipeline: <b>is this message a scam?</b> and <b>does this text look AI-written?</b></p>
+      <div class="callout"><b>Design rule:</b> transparent rules decide the score. The LLM only explains. The student verifies.</div>
+      <h4>Stack</h4>
+      <table>
+        <tr><th>Layer</th><th>Tech</th></tr>
+        <tr><td>Frontend</td><td>React 19, Vite 7, TypeScript, tesseract.js</td></tr>
+        <tr><td>Backend</td><td>Express 5, TypeScript via tsx</td></tr>
+        <tr><td>Storage</td><td>node:sqlite (Node ≥ 22.5), in-memory fallback</td></tr>
+        <tr><td>LLM</td><td>Any OpenAI-compatible API. Groq free tier by default</td></tr>
+        <tr><td>Tooling</td><td>ESLint 9, tsc, concurrently</td></tr>
+      </table>
+      <h4>Folders</h4>
+      <div class="files"><code>frontend/</code><code>BE/</code><code>shared/types.ts</code><code>.env</code></div>
+      <h4>How to read this page</h4>
+      <ul><li>Each block is a stage. Arrows show data moving down.</li><li>Blocks with a coloured badge open into their own sub-flow.</li><li>Use the breadcrumb or <kbd>Esc</kbd> to go back up.</li><li>Switch to <b>Full outline</b> to see everything at once.</li></ul>`
+  },
+
+  /* ---------------- Student ---------------- */
+  student: {
+    title: 'Student / teacher', kind: 'actor', icon: '👤',
+    sub: 'Has a suspicious message or a text to check.',
+    rows: [['in-paste', 'in-shot', 'in-sample']], edges: [],
+    body: `<p>The user picks a mode with the switch at the top, then provides text in one of three ways.</p>
+      <h4>Two modes</h4>
+      <ul><li><b>Scam check</b>: scholarship, internship and job offers received on WhatsApp, SMS or email.</li><li><b>AI-writing check</b>: essays, assignments, cover letters, emails.</li></ul>
+      <h4>Toggles in the header</h4>
+      <ul><li><b>Education mode</b> shows a one-line lesson under every signal.</li><li><b>Predict first</b> hides the result until the audience guesses.</li><li>The <b>AI badge</b> shows whether an LLM key is active.</li></ul>`
+  },
+  'in-paste': { title: 'Paste text', kind: 'actor', icon: '⌨', sub: 'Most reliable input path.',
+    body: `<p>Text goes straight into the textarea. 10 to 8,000 characters are accepted.</p><p>For AI-writing checks, 150+ words gives the statistics enough data. Under 50 words the score is capped at “Uncertain”.</p>`, files: ['frontend/src/components/MessageInput.tsx'] },
+  'in-shot': { title: 'Upload screenshot', kind: 'actor', icon: '🖼', sub: 'OCR runs inside the browser.',
+    body: `<p>Click <b>Upload screenshot</b> or drop an image on the textarea. <code>tesseract.js</code> reads it locally with English language data, about 4 MB on first use, then fills the textarea so the user can correct OCR mistakes before analysing.</p><p>The image never leaves the device.</p>`, files: ['frontend/src/lib/ocr.ts', 'frontend/src/components/MessageInput.tsx'] },
+  'in-sample': { title: 'Load a sample', kind: 'actor', icon: '🧪', sub: 'Seven fictional demo texts.',
+    body: `<p>Before any analysis, the right panel lists samples for the current mode.</p>
+      <table><tr><th>Mode</th><th>Sample</th><th>Result</th></tr>
+      <tr><td>Scam</td><td>A Obvious scam</td><td><span class="sev h">High 96</span></td></tr>
+      <tr><td>Scam</td><td>B Legit notice</td><td><span class="sev p">Low 0</span></td></tr>
+      <tr><td>Scam</td><td>C Sophisticated</td><td><span class="sev h">High 88</span></td></tr>
+      <tr><td>Scam</td><td>D Grey area</td><td><span class="sev m">Medium 41</span></td></tr>
+      <tr><td>AI</td><td>E AI-style essay</td><td><span class="sev h">Likely AI 92</span></td></tr>
+      <tr><td>AI</td><td>F Human WhatsApp</td><td><span class="sev p">Likely human 0</span></td></tr>
+      <tr><td>AI</td><td>G Polished human report</td><td><span class="sev m">Uncertain 35</span></td></tr></table>`,
+    files: ['BE/src/samples.ts'] },
+
+  /* ---------------- Frontend ---------------- */
+  frontend: {
+    title: 'Frontend (React)', kind: 'ui', icon: '🖥',
+    sub: 'Three-column app. Mode switch, input, evidence and details.',
+    rows: [['fe-app'], ['fe-mode', 'fe-input'], ['fe-api', 'fe-sel']], edges: ['state', 'calls / selects'],
+    body: `<p>A single-page React app served by Vite in development and by Express in production.</p>
+      <h4>Layout</h4>
+      <ul><li><b>Left</b>: history for the current mode.</li><li><b>Middle</b>: input, risk meter, highlighted message, evidence rows, link rows. The only scrolling column.</li><li><b>Right</b>: detail panel showing whatever was clicked.</li><li>The header and columns fill one viewport. The footer sits below the fold.</li><li>Under 1000px it becomes one ordinary scrolling column.</li></ul>`,
+    files: ['frontend/src/App.tsx', 'frontend/src/styles.css'] },
+  'fe-app': { title: 'App.tsx state', kind: 'ui', icon: '⚙', sub: 'mode, message, result, selection, history.',
+    body: `<p>All page state lives in <code>App</code>:</p>
+      <pre>mode: 'scam' | 'ai'
+message, busy, error
+result: AnalysisResult | null
+selection: Selection          // what the right panel shows
+activeId                      // hovered signal (cross-highlight)
+history, samples, health
+educationMode, judgeMode, prediction, revealed</pre>
+      <p>Switching mode clears the result and reloads the samples and history for that mode.</p>`, files: ['frontend/src/App.tsx'] },
+  'fe-mode': { title: 'ModeSwitch', kind: 'ui', icon: '⇄', sub: 'Scam check ↔ AI-writing check.',
+    body: `<p>A segmented control in the header. Every mode-specific label lives in <code>MODE_TEXT</code> in <code>lib/format.ts</code>: titles, placeholders, level names, disclaimers.</p>
+      <table><tr><th>Level</th><th>Scam</th><th>AI</th></tr><tr><td>low</td><td>Low risk</td><td>Likely human</td></tr><tr><td>medium</td><td>Medium risk</td><td>Uncertain</td></tr><tr><td>high</td><td>High risk</td><td>Likely AI-assisted</td></tr></table>
+      <p>AI mode switches the accent colour to violet.</p>`, files: ['frontend/src/components/ModeSwitch.tsx', 'frontend/src/lib/format.ts'] },
+  'fe-input': { title: 'MessageInput', kind: 'ui', icon: '✎', sub: 'Textarea, OCR upload, Analyze.',
+    body: `<p>Controlled textarea plus a hidden file input. The Analyze button is disabled under 10 characters or while busy. OCR progress is shown on the upload button.</p>`, files: ['frontend/src/components/MessageInput.tsx'] },
+  'fe-api': { title: 'lib/api.ts', kind: 'api', icon: '⇅', sub: 'Typed fetch wrapper.',
+    body: `<pre>api.health()
+api.samples(mode)
+api.analyze(message, mode)
+api.history(mode)
+api.historyItem(id)
+api.clearHistory()</pre><p>Calls go to <code>/api/*</code>. In development Vite proxies them to port 3001.</p>`, files: ['frontend/src/lib/api.ts', 'vite.config.ts'] },
+  'fe-sel': { title: 'Selection model', kind: 'ui', icon: '☰', sub: 'Drives the right-hand panel.',
+    body: `<pre>type Selection =
+  | { kind: 'summary' }
+  | { kind: 'signal'; id }
+  | { kind: 'link'; url }
+  | { kind: 'steps' }
+  | { kind: 'questions' }</pre><p>Clicking an evidence row, a highlight, a link row or a nav button sets it. <code>DetailPanel</code> renders the matching view.</p>`, files: ['frontend/src/lib/selection.ts', 'frontend/src/components/DetailPanel.tsx'] },
+
+  /* ---------------- API ---------------- */
+  api: {
+    title: 'Express API', kind: 'api', icon: '🔌',
+    sub: 'REST endpoints under /api, port 3001.',
+    rows: [['ep-analyze'], ['ep-history', 'ep-samples', 'ep-health']], edges: [''],
+    body: `<p>Express 5 with CORS and a 1 MB JSON body limit. In production it also serves the built frontend from <code>dist/</code>.</p>
+      <table><tr><th>Method</th><th>Path</th></tr>
+      <tr><td>POST</td><td><code>/api/analyze</code></td></tr><tr><td>GET</td><td><code>/api/history?mode=&limit=</code></td></tr>
+      <tr><td>GET</td><td><code>/api/history/:id</code></td></tr><tr><td>DELETE</td><td><code>/api/history</code></td></tr>
+      <tr><td>GET</td><td><code>/api/samples?mode=</code></td></tr><tr><td>GET</td><td><code>/api/health</code></td></tr></table>`,
+    files: ['BE/src/server.ts', 'BE/src/routes/api.ts'] },
+  'ep-analyze': { title: 'POST /analyze', kind: 'api', icon: '▶', sub: 'The main endpoint.',
+    body: `<pre>{ "message": "...", "mode": "scam" | "ai", "save": true }</pre>
+      <ul><li>Rejects under 10 or over 8,000 characters with HTTP 400.</li><li>Unknown mode defaults to <code>scam</code>.</li><li>Saves to history unless <code>save: false</code>.</li><li>Returns a full <code>AnalysisResult</code>.</li></ul>`, files: ['BE/src/routes/api.ts'] },
+  'ep-history': { title: 'History endpoints', kind: 'api', icon: '🕘', sub: 'List, open, clear.',
+    body: `<p><code>GET /history?mode=ai&limit=20</code> returns previews: id, time, mode, first 90 characters, score, level.</p><p><code>GET /history/:id</code> returns the full stored result. <code>DELETE /history</code> clears all.</p>`, files: ['BE/src/routes/api.ts', 'BE/src/db.ts'] },
+  'ep-samples': { title: 'GET /samples', kind: 'api', icon: '🧪', sub: 'Demo texts per mode.', body: `<p>Returns sample messages filtered by <code>?mode=</code>. Each has an id, label, description, expected level and text.</p>`, files: ['BE/src/samples.ts'] },
+  'ep-health': { title: 'GET /health', kind: 'api', icon: '♥', sub: 'Provider status for the header badge.',
+    body: `<pre>{ "ok": true,
+  "llm": { "provider": "groq", "model": "openai/gpt-oss-120b", "enabled": false },
+  "safeBrowsing": false,
+  "history": "sqlite" }</pre>`, files: ['BE/src/routes/api.ts'] },
+
+  /* ---------------- Orchestrator ---------------- */
+  orchestrator: {
+    title: 'analyze.ts pipeline', kind: 'engine', icon: '⛓',
+    sub: 'Normalise, cache, route by mode, merge.',
+    rows: [['or-norm'], ['or-cache'], ['or-route'], ['or-merge']], edges: ['', 'miss', 'signals + explanation'],
+    body: `<p>The orchestrator runs one analysis.</p>
+      <pre>normalise text
+→ cache lookup  sha1(mode:provider:model:text)
+→ scam: checkLinks → runRules
+  ai:   runAiRules
+→ explain(text, signals, level, links, mode)
+→ merge LLM texts into signals
+→ AnalysisResult (+ cache if LLM used)</pre>`, files: ['BE/src/analyze.ts'] },
+  'or-norm': { title: 'Normalise', kind: 'engine', icon: '⌫', sub: 'CRLF → LF, trim.', body: `<p>Line endings are unified and outer whitespace trimmed, so highlight offsets match what the frontend displays.</p>`, files: ['BE/src/analyze.ts'] },
+  'or-cache': { title: 'Result cache', kind: 'data', icon: '⚡', sub: 'Saves free-tier LLM quota.', body: `<p>An in-memory <code>Map</code> keyed by <code>sha1(mode:provider:model:text)</code>. Only results where the LLM succeeded are cached. A hit returns a copy with a fresh id and timestamp. Repeated demo runs cost nothing.</p>`, files: ['BE/src/analyze.ts'] },
+  'or-route': { title: 'Route by mode', kind: 'engine', icon: '⑂', sub: 'scam → links + scam rules · ai → AI rules.', body: `<p>Scam mode runs the URL checker first, because the link signal is derived from link verdicts. AI mode skips links entirely.</p>`, files: ['BE/src/analyze.ts'] },
+  'or-merge': { title: 'Merge', kind: 'engine', icon: '⊕', sub: 'LLM text replaces rule text where present.', body: `<p>For each signal, <code>explanation</code> and <code>lesson</code> are replaced by the LLM version when one exists for that id. Score, level, severity and spans always come from the rules.</p>`, files: ['BE/src/analyze.ts'] },
+
+  /* ---------------- Scam mode ---------------- */
+  scam: {
+    title: 'Scam check engine', kind: 'engine', icon: '⚠',
+    sub: 'Links → rules → bonuses → score curve.',
+    rows: [['links'], ['scam-rules'], ['scam-bonus'], ['score']], edges: ['link verdicts + spans', 'matched signals', 'raw points'],
+    body: `<p>Deterministic and explainable. Every point on the meter traces back to a rule and the words that triggered it.</p>
+      <div class="callout">Sample A scores 96. Sample B, a genuine college notice, scores 0 because legitimacy indicators carry negative weight.</div>`,
+    files: ['BE/src/rules/signals.ts', 'BE/src/rules/index.ts', 'BE/src/urlcheck.ts'] },
+  links: {
+    title: 'Link checker', kind: 'link', icon: '🔗', sub: 'Extract URLs, score heuristics, optional Safe Browsing.',
+    rows: [['lk-extract'], ['lk-heur', 'lk-sb'], ['lk-verdict']], edges: ['urls + positions', 'suspicion points'],
+    body: `<p>Produces one <code>LinkCheck</code> per URL and the text spans to highlight. Unknown is never treated as safe.</p>`, files: ['BE/src/urlcheck.ts'] },
+  'lk-extract': { title: 'Extract URLs', kind: 'link', icon: '⌕', sub: 'With positions, without false matches.',
+    body: `<ul><li>With scheme: always a link.</li><li>Without scheme: only if the last label is a known TLD, so <code>B.Tech</code> and <code>8.5</code> are ignored.</li><li>Skipped when glued to <code>@</code>, which drops emails and UPI IDs.</li><li>Trailing punctuation is stripped. Duplicates are removed.</li></ul>`, files: ['BE/src/urlcheck.ts'] },
+  'lk-heur': { title: 'Heuristics', kind: 'link', icon: '🧮', sub: 'Shorteners, IPs, cheap TLDs, trust words.',
+    body: `<table><tr><th>Check</th><th>Points</th></tr>
+      <tr><td>Shortener (bit.ly, tinyurl …)</td><td>+2</td></tr><tr><td>Raw IP address</td><td>+2</td></tr>
+      <tr><td>Abused TLD (.xyz .top .club .tk .site …)</td><td>+1</td></tr><tr><td>Trust words (verify, official, secure, kyc …)</td><td>+1</td></tr>
+      <tr><td>3+ sub-domain labels</td><td>+1</td></tr><tr><td>Plain http://</td><td>+1</td></tr></table>
+      <p>Institutional suffixes (.ac.in, .edu, .gov.in, .nic.in, .gov, .res.in) with zero points become <b>likely official</b>.</p>`, files: ['BE/src/urlcheck.ts'] },
+  'lk-sb': { title: 'Google Safe Browsing', kind: 'link', icon: '🛡', sub: 'Optional real blocklist lookup.', body: `<p>If <code>SAFE_BROWSING_API_KEY</code> is set, all URLs are sent in one Lookup API v4 request for malware, social engineering and unwanted software. A match sets the verdict to <b>flagged</b>. 5-second timeout. Failure is ignored.</p>`, files: ['BE/src/urlcheck.ts', '.env'] },
+  'lk-verdict': { title: 'Verdict → link signal', kind: 'link', icon: '⚑', sub: 'Worst link sets the weight.',
+    body: `<table><tr><th>Verdict</th><th>Signal weight</th></tr><tr><td>likely-official</td><td>0, no signal</td></tr><tr><td>unverified</td><td>+6</td></tr><tr><td>suspicious</td><td>+12</td></tr><tr><td>flagged</td><td>+30</td></tr></table><p>The link signal uses the URL spans from extraction, so the exact link is highlighted.</p>`, files: ['BE/src/rules/index.ts'] },
+
+  'scam-rules': {
+    title: 'Scam rules', kind: 'engine', icon: '📏', sub: '11 warning rules + 4 legitimacy indicators.',
+    rows: [['sr-money', 'sr-pressure', 'sr-data'], ['sr-contact', 'sr-legit']], edges: [''],
+    body: `<p>Each rule is a list of regexes with a fixed weight, severity, explanation, lesson and verification tip. Matches become highlighted spans. Overlapping spans are merged.</p>
+      <pre>{ id, title, severity, weight,
+  patterns: RegExp[], minMatches?,
+  explanation, lesson, verification }</pre>`, files: ['BE/src/rules/signals.ts'] },
+  'sr-money': { title: 'Money', kind: 'engine', icon: '₹', sub: 'Fees, refunds, untraceable payment.',
+    body: `<table><tr><th>Rule</th><th>Sev</th><th>Wt</th></tr>
+      <tr><td>Upfront payment: "pay … fee", "verification fee", ₹499</td><td class="sev h">High</td><td>+30</td></tr>
+      <tr><td>Untraceable payment: UPI apps, xyz@ybl, gift cards, crypto</td><td class="sev h">High</td><td>+15</td></tr>
+      <tr><td>"Refundable" fee</td><td class="sev m">Med</td><td>+8</td></tr></table>`, files: ['BE/src/rules/signals.ts'] },
+  'sr-pressure': { title: 'Pressure', kind: 'engine', icon: '⏱', sub: 'Urgency, too-good offers, authority, secrecy.',
+    body: `<table><tr><th>Rule</th><th>Sev</th><th>Wt</th></tr>
+      <tr><td>Artificial urgency: "within 15 minutes / 2 days", "urgent", "will be cancelled", "limited seats"</td><td class="sev h">High</td><td>+15</td></tr>
+      <tr><td>Too good to be true: 2+ of "congratulations", "selected", "guaranteed", "no interview"</td><td class="sev m">Med</td><td>+10</td></tr>
+      <tr><td>Authority name: Ministry, UGC, AICTE, NSP, RBI</td><td class="sev m">Med</td><td>+8</td></tr>
+      <tr><td>Secrecy: "do not share", "confidential"</td><td class="sev m">Med</td><td>+8</td></tr>
+      <tr><td>Shouting: 2+ of !! or ALL-CAPS</td><td class="sev l">Info</td><td>+2</td></tr></table>`, files: ['BE/src/rules/signals.ts'] },
+  'sr-data': { title: 'Sensitive data', kind: 'engine', icon: '🔐', sub: 'Aadhaar, PAN, OTP, PIN, bank.',
+    body: `<table><tr><th>Rule</th><th>Sev</th><th>Wt</th></tr><tr><td>Aadhaar, PAN, passport, voter ID, OTP, CVV, UPI/ATM PIN, password, bank account, debit/credit card</td><td class="sev h">High</td><td>+20</td></tr></table><p>Lesson shown in education mode: <i>never share OTP, PIN, CVV or passwords with anyone.</i></p>`, files: ['BE/src/rules/signals.ts'] },
+  'sr-contact': { title: 'Contact channel', kind: 'engine', icon: '✉', sub: 'Free email, chat-only, generic greeting.',
+    body: `<table><tr><th>Rule</th><th>Sev</th><th>Wt</th></tr>
+      <tr><td>Unofficial contact: gmail/yahoo/outlook, "WhatsApp only", t.me/, wa.me/</td><td class="sev m">Med</td><td>+12</td></tr>
+      <tr><td>Generic greeting: "Dear student / candidate / user"</td><td class="sev l">Low</td><td>+4</td></tr></table>`, files: ['BE/src/rules/signals.ts'] },
+  'sr-legit': { title: 'Legitimacy indicators', kind: 'engine', icon: '✔', sub: 'Negative weights pull the score down.',
+    body: `<table><tr><th>Indicator</th><th>Wt</th></tr>
+      <tr><td>Official domain: .ac.in .edu .gov.in .nic.in</td><td class="sev p">−15</td></tr>
+      <tr><td>"No fee" / "free of cost"</td><td class="sev p">−10</td></tr>
+      <tr><td>Named contact: Dean, Registrar, Coordinator, Dr., Prof.</td><td class="sev p">−8</td></tr>
+      <tr><td>Dated deadline: "last date … 30 November"</td><td class="sev p">−5</td></tr></table>
+      <p>These show in green as <b>Positive</b> in the UI.</p>`, files: ['BE/src/rules/signals.ts'] },
+  'scam-bonus': { title: 'Combination bonuses', kind: 'engine', icon: '✚', sub: 'Dangerous pairs add +8 each.',
+    body: `<ul><li>Upfront payment + artificial urgency</li><li>Upfront payment + untraceable channel</li><li>Sensitive data + link</li><li>Authority name + upfront payment</li></ul><p>Scams rarely use one trick. Pairs are much stronger evidence than either alone.</p>`, files: ['BE/src/rules/index.ts'] },
+  score: { title: 'Score curve → level', kind: 'engine', icon: '📈', sub: 'Diminishing returns, three bands.',
+    body: `<pre>raw   = max(0, Σ weights + bonuses)
+score = round(100 × (1 − e^(−raw / 55)))
+level = score &lt; 30  → low
+        score &lt; 60  → medium
+        otherwise   → high</pre>
+      <table><tr><th>raw</th><th>score</th></tr><tr><td>20</td><td>30</td></tr><tr><td>30</td><td>42</td></tr><tr><td>50</td><td>60</td></tr><tr><td>100</td><td>84</td></tr><tr><td>150</td><td>93</td></tr></table>
+      <p>Used by both modes. The UI labels the number as illustrative, not a calibrated probability.</p>`, files: ['BE/src/rules/index.ts', 'BE/src/airules/index.ts'] },
+
+  /* ---------------- AI mode ---------------- */
+  aimode: {
+    title: 'AI-writing engine', kind: 'ai', icon: '✎',
+    sub: 'Patterns + statistics − human signals.',
+    rows: [['ai-patterns', 'ai-stats'], ['ai-human'], ['ai-score']], edges: ['', 'net points'],
+    body: `<p>Looks for documented habits of LLM output and for traces of a human voice. Rules come from Wikipedia’s <i>Signs of AI writing</i> field guide and detector write-ups.</p>
+      <div class="callout"><b>Not a detector.</b> Formal or non-native human writing triggers many cues. Output is a conversation starter, never proof.</div>
+      <p>Pattern rules use <code>perMatch</code> × matches, capped at <code>maxWeight</code>, so one repeated word cannot dominate.</p>`,
+    files: ['BE/src/airules/signals.ts', 'BE/src/airules/stats.ts', 'BE/src/airules/index.ts'] },
+  'ai-patterns': {
+    title: 'Pattern rules', kind: 'ai', icon: '🔍', sub: '14 phrase and formatting rules.',
+    rows: [['ap-hard'], ['ap-vocab', 'ap-struct', 'ap-format']], edges: [''],
+    body: `<p>Regex rules over the raw text. Matches are highlighted like scam evidence.</p>`, files: ['BE/src/airules/signals.ts'] },
+  'ap-hard': { title: 'Hard artifacts', kind: 'ai', icon: '⛔', sub: 'Near-certain evidence of a paste.',
+    body: `<table><tr><th>Signal</th><th>Per / cap</th></tr>
+      <tr><td>Chatbot talk: "As an AI language model", "I hope this helps", "Certainly!", "Here is a revised version:"</td><td>+25 / 35</td></tr>
+      <tr><td>Citation markup: <code>oaicite</code>, <code>contentReference</code>, <code>utm_source=chatgpt</code></td><td>+30 / 30</td></tr></table>
+      <p>These also lift the short-text cap.</p>`, files: ['BE/src/airules/signals.ts'] },
+  'ap-vocab': { title: 'Vocabulary', kind: 'ai', icon: '📚', sub: 'delve, tapestry, testament, pivotal …',
+    body: `<table><tr><th>Signal</th><th>Per / cap</th></tr>
+      <tr><td>AI vocabulary (2+): delve, tapestry, testament, pivotal, multifaceted, meticulous, foster, leverage, robust, seamless, holistic, realm, embark …</td><td>+4 / 20</td></tr>
+      <tr><td>Inflated significance: "stands as a testament", "plays a vital role", "evolving landscape", "cannot be overstated"</td><td>+6 / 18</td></tr>
+      <tr><td>Copula avoidance (2+): "serves as", "boasts", "encompasses"</td><td>+3 / 12</td></tr>
+      <tr><td>Vague authorities: "experts argue", "studies show"</td><td>+5 / 10</td></tr></table>`, files: ['BE/src/airules/signals.ts'] },
+  'ap-struct': { title: 'Structure', kind: 'ai', icon: '🏗', sub: 'Parallelisms, triplets, transitions.',
+    body: `<table><tr><th>Signal</th><th>Per / cap</th></tr>
+      <tr><td>Negative parallelism: "not only … but also", "it's not just X, it's Y"</td><td>+6 / 12</td></tr>
+      <tr><td>Formulaic transitions (2+): Additionally, Furthermore, Moreover, "In today's fast-paced world"</td><td>+3 / 12</td></tr>
+      <tr><td>Formulaic conclusion: "In conclusion", "Looking ahead"</td><td>+6 / 12</td></tr>
+      <tr><td>Adjective triplets (2+): "innovative, scalable, and sustainable"</td><td>+3 / 9</td></tr>
+      <tr><td>Hedged balance (2+): "it is important to note", "on the other hand"</td><td>+3 / 9</td></tr></table>`, files: ['BE/src/airules/signals.ts'] },
+  'ap-format': { title: 'Formatting', kind: 'ai', icon: '✱', sub: 'Markdown, em dashes, curly quotes.',
+    body: `<table><tr><th>Signal</th><th>Per / cap</th></tr>
+      <tr><td>Chat formatting: <code>**bold:**</code>, <code>## headers</code>, emoji bullets, <code>---</code></td><td>+6 / 18</td></tr>
+      <tr><td>Em dashes (2+): —</td><td>+3 / 12</td></tr><tr><td>Curly quotes (3+): “ ” ‘ ’</td><td>+2 / 6</td></tr></table>
+      <p>Formatting travels with the paste. Curly quotes are weak alone because Word and Docs also produce them.</p>`, files: ['BE/src/airules/signals.ts'] },
+  'ai-stats': {
+    title: 'Statistics', kind: 'ai', icon: '📊', sub: 'Burstiness, paragraphs, register.',
+    rows: [['st-split'], ['st-burst', 'st-para', 'st-reg']], edges: ['sentences + words'],
+    body: `<p>Whole-text measurements with no spans to highlight. They show in the evidence list with a numeric explanation.</p>`, files: ['BE/src/airules/stats.ts'] },
+  'st-split': { title: 'Split sentences', kind: 'ai', icon: '✂', sub: 'Sentences of 2+ words; word count.', body: `<p>Text is split on <code>. ! ?</code> and newlines. Fragments under two words are dropped. Under 50 words a <b>Too little text</b> info signal is added.</p>`, files: ['BE/src/airules/stats.ts'] },
+  'st-burst': { title: 'Burstiness', kind: 'ai', icon: '〰', sub: 'Variation in sentence length.',
+    body: `<p>Coefficient of variation = standard deviation ÷ mean of sentence lengths. Needs 5+ sentences.</p>
+      <table><tr><th>CV</th><th>Signal</th><th>Wt</th></tr><tr><td>&lt; 0.30</td><td>Very uniform</td><td>+18</td></tr><tr><td>&lt; 0.45</td><td>Fairly uniform</td><td>+9</td></tr><tr><td>&gt; 0.70</td><td>Bursty, human-like</td><td class="sev p">−10</td></tr></table>
+      <p>Humans write a long sentence, then a short one. Models keep a steady rhythm.</p>`, files: ['BE/src/airules/stats.ts'] },
+  'st-para': { title: 'Paragraphs & openers', kind: 'ai', icon: '¶', sub: 'Uniform sizes, never-repeating starts.',
+    body: `<ul><li><b>Evenly sized paragraphs</b>: 3+ paragraphs of 15+ words with CV &lt; 0.25 → +8.</li><li><b>Every sentence opens differently</b>: 8+ sentences, over 90% distinct first words → +6.</li></ul>`, files: ['BE/src/airules/stats.ts'] },
+  'st-reg': { title: 'Register', kind: 'ai', icon: '🎚', sub: 'No contractions, no first person.',
+    body: `<p>Only for texts of 120+ words.</p><ul><li>Zero contractions → +7.</li><li>No I / my / we → +5, info severity because reports are impersonal by design.</li></ul>`, files: ['BE/src/airules/stats.ts'] },
+  'ai-human': { title: 'Human counter-signals', kind: 'actor', icon: '🙂', sub: 'Slang, typos, personal detail lower the score.',
+    body: `<table><tr><th>Signal</th><th>Per / cap</th></tr>
+      <tr><td>Slang & Hinglish: lol, tbh, idk, yaar, bhai, nahi</td><td class="sev p">−4 / −12</td></tr>
+      <tr><td>Typos & messy punctuation: lower-case "i", " ,", "recieve"</td><td class="sev p">−3 / −12</td></tr>
+      <tr><td>Personal detail: "my roommate", "yesterday", "at 2pm"</td><td class="sev p">−3 / −9</td></tr>
+      <tr><td>Contractions (2+)</td><td class="sev p">−1 / −8</td></tr>
+      <tr><td>Emotional punctuation: !!, :), haha</td><td class="sev p">−3 / −6</td></tr></table>
+      <p>Sample F scores 0 because these outweigh its two weak style cues.</p>`, files: ['BE/src/airules/signals.ts'] },
+  'ai-score': { title: 'AI score & caps', kind: 'ai', icon: '🎯', sub: 'Bonuses, same curve, short-text cap.',
+    body: `<p><b>Bonuses</b></p><ul><li>Vocabulary + inflated significance: +8</li><li>Uniform rhythm + formulaic transitions: +8</li><li>Chat formatting + formulaic conclusion: +6</li></ul>
+      <p><b>Score</b> uses the same exponential curve as scam mode.</p>
+      <p><b>Short-text cap</b>: under 50 words the score is capped at 45, "Uncertain", unless a chatbot or citation artifact is present.</p>`, files: ['BE/src/airules/index.ts'] },
+
+  /* ---------------- LLM ---------------- */
+  llm: {
+    title: 'LLM explain layer', kind: 'llm', icon: '✨',
+    sub: 'Optional. Rewrites explanations, never the score.',
+    rows: [['llm-prompt'], ['llm-client'], ['llm-parse'], ['llm-fallback']], edges: ['messages', 'raw JSON text', 'invalid / error'],
+    body: `<p>Turns generic rule text into explanations that quote the user’s actual message.</p>
+      <div class="callout">The LLM receives signals that were already detected. It cannot add points, remove signals or change the level.</div>
+      <h4>Output JSON</h4>
+      <pre>{ summary,
+  evidence:   { [signalId]: string },
+  lessons:    { [signalId]: string },
+  verificationSteps: string[],
+  checklistQuestions: string[],
+  aiObservations: string[],   // shown, never scored
+  uncertainty }</pre>`, files: ['BE/src/llm/explain.ts', 'BE/src/llm/client.ts'] },
+  'llm-prompt': { title: 'Prompt builder', kind: 'llm', icon: '📝', sub: 'Two system prompts, one per mode.',
+    body: `<ul><li><b>Scam prompt</b>: explain, do not decide. Plain English for a 19-year-old. Quote the message.</li><li><b>AI-writing prompt</b>: never claim definite authorship. Must mention false positives. Steps focus on drafts, oral discussion and version history.</li></ul>
+      <p>User message: the text up to 4,000 characters, the level, signal ids with up to 5 matched snippets each, and link verdicts in scam mode.</p>`, files: ['BE/src/llm/explain.ts'] },
+  'llm-client': { title: 'Provider client', kind: 'llm', icon: '☁', sub: 'One OpenAI-compatible client, no SDK.',
+    rows: [['pv-groq', 'pv-gemini', 'pv-or', 'pv-oai']], edges: [],
+    body: `<pre>POST {baseUrl}/chat/completions
+Authorization: Bearer KEY
+{ model, messages, temperature: 0.2,
+  max_tokens: 900,
+  response_format: { type: "json_object" } }</pre><p>25-second timeout. Non-2xx responses throw with status and the first 300 characters of the body.</p>`, files: ['BE/src/llm/client.ts', 'BE/src/config.ts'] },
+  'pv-groq': { title: 'Groq (default)', kind: 'llm', icon: 'G', sub: 'Free, no card, very fast.', body: `<p><code>https://api.groq.com/openai/v1</code></p><p>Default model <code>openai/gpt-oss-120b</code>. About 1,000 requests a day and 30 a minute on the free tier, October 2026. Llama 3.3/3.1 were retired 16 Aug 2026.</p><p>Key: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">console.groq.com/keys</a> → <code>GROQ_API_KEY</code></p>` },
+  'pv-gemini': { title: 'Gemini', kind: 'llm', icon: 'Gm', sub: 'Free Flash models.', body: `<p><code>https://generativelanguage.googleapis.com/v1beta/openai</code></p><p>Default <code>gemini-2.5-flash</code>. Free tier covers Flash models. Limits are shown in AI Studio.</p><p>Key → <code>GEMINI_API_KEY</code>, set <code>LLM_PROVIDER=gemini</code>.</p>` },
+  'pv-or': { title: 'OpenRouter', kind: 'llm', icon: 'OR', sub: ':free models, 50 req/day.', body: `<p><code>https://openrouter.ai/api/v1</code></p><p>Default <code>openai/gpt-oss-20b:free</code>. 20 requests a minute, 50 a day, 1,000 after a $10 lifetime top-up. Sends <code>HTTP-Referer</code> and <code>X-Title</code> headers.</p>` },
+  'pv-oai': { title: 'OpenAI', kind: 'llm', icon: 'O', sub: 'Paid fallback.', body: `<p><code>https://api.openai.com/v1</code>, default <code>gpt-4o-mini</code>. Any other OpenAI-compatible endpoint can be added as a preset in <code>config.ts</code>.</p>` },
+  'llm-parse': { title: 'Parse & validate', kind: 'llm', icon: '🧾', sub: 'Strip fences, parse, type-check every field.',
+    body: `<ul><li>Removes <code>\`\`\`json</code> fences and extracts the outermost <code>{…}</code> if needed.</li><li>Each field is checked: strings trimmed, arrays filtered to strings, maps filtered to string values.</li><li>Missing or empty fields fall back to the rule text field by field.</li><li><code>aiObservations</code> is cut to 3.</li></ul>`, files: ['BE/src/llm/explain.ts'] },
+  'llm-fallback': { title: 'Rule fallback', kind: 'engine', icon: '🛟', sub: 'Demo never breaks.',
+    body: `<p>No key, timeout, HTTP error or invalid JSON all return a rule-written explanation:</p><ul><li>Summary chosen by level and mode.</li><li>Each signal keeps its built-in explanation, lesson and verification tip.</li><li>Default next steps and questions per mode.</li></ul><p>The UI shows a small "Rules-only mode" note with the reason.</p>`, files: ['BE/src/llm/explain.ts'] },
+
+  /* ---------------- Storage ---------------- */
+  storage: {
+    title: 'History storage', kind: 'data', icon: '🗄',
+    sub: 'node:sqlite, in-memory fallback.',
+    rows: [['db-sqlite', 'db-mem']], edges: [],
+    body: `<p>Every analysis is saved unless <code>save: false</code>. History is filtered by mode in the UI.</p>`, files: ['BE/src/db.ts'] },
+  'db-sqlite': { title: 'SQLite table', kind: 'data', icon: '🗃', sub: 'BE/data/trustcheck.db',
+    body: `<pre>CREATE TABLE analyses (
+  id         TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  preview    TEXT NOT NULL,   -- first 90 chars
+  score      INTEGER NOT NULL,
+  level      TEXT NOT NULL,
+  payload    TEXT NOT NULL,   -- full JSON result
+  mode       TEXT NOT NULL DEFAULT 'scam'
+)</pre><p>The <code>mode</code> column is added with <code>ALTER TABLE</code> on start, so older databases upgrade in place. The file is git-ignored.</p>`, files: ['BE/src/db.ts'] },
+  'db-mem': { title: 'Memory fallback', kind: 'data', icon: '💾', sub: 'If node:sqlite is missing.', body: `<p>On Node older than 22.5 the import fails, a warning is logged and an in-memory array is used with the same interface. History is lost on restart.</p>`, files: ['BE/src/db.ts'] },
+
+  /* ---------------- Report UI ---------------- */
+  report: {
+    title: 'Report UI', kind: 'ui', icon: '📋',
+    sub: 'Left history · middle evidence · right details.',
+    rows: [['ui-meter'], ['ui-hl', 'ui-ev', 'ui-links'], ['ui-detail'], ['ui-history', 'ui-predict']], edges: ['', 'click selects', ''],
+    body: `<p>The result is split so nothing overflows: compact clickable rows in the middle, full explanations on the right.</p>`, files: ['frontend/src/components/Report.tsx', 'frontend/src/components/DetailPanel.tsx'] },
+  'ui-meter': { title: 'Risk meter', kind: 'ui', icon: '▬', sub: '0–100 bar, ticks at 30 and 60.', body: `<p>Bar colour follows the level. A badge shows the mode-specific level name. Under it: Summary, Next steps and Questions buttons that drive the right panel.</p>`, files: ['frontend/src/components/RiskMeter.tsx'] },
+  'ui-hl': { title: 'Highlighted message', kind: 'ui', icon: '🖍', sub: 'Exact evidence in context.', body: `<p>All signal spans are sorted, overlaps skipped, and each piece rendered as a <code>&lt;mark&gt;</code> coloured by severity, green for positive signals. Hover dims other highlights and lights the matching row. Click opens the signal on the right.</p>`, files: ['frontend/src/components/HighlightedMessage.tsx'] },
+  'ui-ev': { title: 'Evidence rows', kind: 'ui', icon: '☰', sub: 'One line per signal, severity only.', body: `<p>Warnings first, then a "Positive" group. Each row shows a coloured dot, the title and a severity label. Point values are deliberately hidden from users.</p>`, files: ['frontend/src/components/EvidenceList.tsx'] },
+  'ui-links': { title: 'Link rows', kind: 'link', icon: '🔗', sub: 'Domain + verdict badge.', body: `<p>Scam mode only. Clicking a row opens the reasons and advice in the right panel.</p>`, files: ['frontend/src/components/LinksPanel.tsx'] },
+  'ui-detail': { title: 'Detail panel', kind: 'ui', icon: '▤', sub: 'Summary · signal · link · steps · questions.',
+    body: `<ul><li><b>Summary</b>: level, LLM summary, counts, uncertainty.</li><li><b>Signal</b>: why it matters, matched text, lesson in education mode, how to verify.</li><li><b>Link</b>: full URL, reasons, what to do.</li><li><b>Next steps</b>: tickable checklist plus AI observations.</li><li><b>Questions</b>: numbered list with a Copy button.</li></ul><p>Before any analysis it shows "How it works" and the samples.</p>`, files: ['frontend/src/components/DetailPanel.tsx', 'frontend/src/components/NextSteps.tsx'] },
+  'ui-history': { title: 'History panel', kind: 'data', icon: '🕘', sub: 'Left column, per mode.', body: `<p>Shows preview, level, score and time. Clicking reopens the stored result and puts its text back in the input. Clear empties the database.</p>`, files: ['frontend/src/components/HistoryPanel.tsx'] },
+  'ui-predict': { title: 'Predict first', kind: 'actor', icon: '🎲', sub: 'Judge mode for live demos.', body: `<p>When enabled, the result is hidden behind three buttons. After a guess the report appears with a banner comparing the guess to TrustCheck’s level.</p>`, files: ['frontend/src/components/PredictGate.tsx'] },
+};
+
+/* ------------------------------------------------------------------------ */
+const $ = (s) => document.querySelector(s);
+const canvas = $('#canvas'), panel = $('#panel'), crumbs = $('#crumbs');
+let path = ['root'];
+let selected = 'root';
+
+function parentOf(id) {
+  for (const [pid, n] of Object.entries(N)) if (n.rows && n.rows.flat().includes(id)) return pid;
+  return null;
+}
+function pathTo(id) {
+  const p = [];
+  let cur = id;
+  while (cur) { p.unshift(cur); cur = parentOf(cur); }
+  return p;
+}
+const hasKids = (id) => !!(N[id].rows && N[id].rows.flat().length);
+const kidCount = (id) => (N[id].rows ? N[id].rows.flat().length : 0);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function arrow(label) {
+  return `<div class="connector" aria-hidden="true">
+    <svg width="14" height="38" viewBox="0 0 14 38"><path d="M7 0 V30"/><path class="head" d="M1 28 L7 37 L13 28 Z"/></svg>
+    ${label ? `<span class="tag">${esc(label)}</span>` : ''}</div>`;
+}
+
+function nodeCard(id) {
+  const n = N[id];
+  const kids = kidCount(id);
+  return `<button class="node k-${n.kind} ${selected === id ? 'selected' : ''}" data-id="${id}" aria-label="${esc(n.title)}">
+    <div class="n-top"><span class="n-icon">${n.icon}</span><span class="n-title">${esc(n.title)}</span></div>
+    <div class="n-sub">${esc(n.sub)}</div>
+    <div class="n-foot"><span class="chip">${KIND_LABEL[n.kind]}</span>${kids ? `<span class="drill">${kids} inside ›</span>` : `<span class="leaf">details ›</span>`}</div>
+  </button>`;
+}
+
+function renderCanvas(direction) {
+  const id = path[path.length - 1];
+  const n = N[id];
+  const rows = n.rows || [];
+  let flow = '';
+  rows.forEach((row, i) => {
+    if (i > 0) flow += arrow(n.edges?.[i - 1] || '');
+    flow += `<div class="row">${row.map(nodeCard).join('')}</div>`;
+  });
+  const kinds = [...new Set(rows.flat().map((k) => N[k].kind))];
+  canvas.innerHTML = `
+    <div class="level-head">
+      <div class="lh-icon k-${n.kind}" style="background:var(--k)">${n.icon}</div>
+      <div><h2>${esc(n.title)}</h2><p>${esc(n.sub)}</p></div>
+      ${path.length > 1 ? `<button class="btn up-btn" id="up">↑ Up a level</button>` : ''}
+    </div>
+    <div class="flow ${direction || ''}">${flow}</div>
+    <div class="legend">${kinds.map((k) => `<span class="k-${k}"><i></i>${KIND_LABEL[k]}</span>`).join('')}</div>
+    <p class="hint">Click a block to open it. Blocks with a coloured badge contain a deeper flow. Esc goes back.</p>`;
+  const up = $('#up');
+  if (up) up.onclick = goUp;
+}
+
+function renderCrumbs() {
+  crumbs.innerHTML = path
+    .map((id, i) => (i === path.length - 1 ? `<span class="cur">${esc(N[id].title)}</span>` : `<button data-depth="${i}">${esc(N[id].title)}</button><span class="sep">›</span>`))
+    .join('');
+}
+
+function renderPanel() {
+  const n = N[selected];
+  const isLevel = selected === path[path.length - 1];
+  const parent = parentOf(selected);
+  const kidsList = hasKids(selected) ? n.rows.flat().map((k) => `<li><a href="#${k}" data-jump="${k}">${esc(N[k].title)}</a> <span style="color:var(--muted)">— ${esc(N[k].sub)}</span></li>`).join('') : '';
+  panel.innerHTML = `
+    <div class="p-head k-${n.kind}" style="--k:var(--k-${n.kind})">
+      <span class="chip">${KIND_LABEL[n.kind]}</span>
+      <h3>${n.icon} ${esc(n.title)}</h3>
+      <p>${esc(n.sub)}</p>
+    </div>
+    <div class="p-body">
+      ${n.body || ''}
+      ${n.files?.length ? `<h4>Source files</h4><div class="files">${n.files.map((f) => `<code>${esc(f)}</code>`).join('')}</div>` : ''}
+      ${kidsList ? `<h4>Inside this block</h4><ul>${kidsList}</ul>` : ''}
+      <div class="p-actions">
+        ${hasKids(selected) && !isLevel ? `<button class="btn primary" data-open="${selected}">Open flow ›</button>` : ''}
+        ${parent ? `<button class="btn" data-jump="${parent}">↑ ${esc(N[parent].title)}</button>` : ''}
+        ${selected !== 'root' ? `<button class="btn" data-jump="root">⌂ Overview</button>` : ''}
+      </div>
+    </div>`;
+  panel.scrollTop = 0;
+}
+
+function render(direction) {
+  renderCrumbs();
+  renderCanvas(direction);
+  renderPanel();
+  const h = '#' + selected;
+  if (location.hash !== h) history.replaceState(null, '', h);
+}
+
+/* Click on a block: always show its explanation; drill in if it has a sub-flow. */
+function openNode(id) {
+  if (!N[id]) return;
+  selected = id;
+  if (hasKids(id)) {
+    path = pathTo(id);
+    render('enter');
+  } else {
+    const p = pathTo(id);
+    path = p.slice(0, -1);
+    render();
+  }
+}
+function jumpTo(id) {
+  if (!N[id]) return;
+  const p = pathTo(id);
+  path = hasKids(id) ? p : p.slice(0, -1);
+  selected = id;
+  render('leave');
+}
+function goUp() {
+  if (path.length <= 1) return;
+  const left = path[path.length - 1];
+  path = path.slice(0, -1);
+  selected = left;
+  render('leave');
+}
+
+canvas.addEventListener('click', (e) => {
+  const b = e.target.closest('.node');
+  if (b) openNode(b.dataset.id);
+});
+crumbs.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-depth]');
+  if (!b) return;
+  path = path.slice(0, Number(b.dataset.depth) + 1);
+  selected = path[path.length - 1];
+  render('leave');
+});
+panel.addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open]');
+  if (o) { e.preventDefault(); openNode(o.dataset.open); return; }
+  const j = e.target.closest('[data-jump]');
+  if (j) { e.preventDefault(); const id = j.dataset.jump; hasKids(id) && pathTo(id).length > path.length ? openNode(id) : jumpTo(id); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.body.classList.contains('mode-outline')) goUp();
+});
+
+/* Outline view */
+function outlineNode(id, depth) {
+  const n = N[id];
+  const kids = n.rows ? n.rows.flat() : [];
+  const head = `<span class="o-dot k-${n.kind}"></span><span class="o-title">${n.icon} ${esc(n.title)}</span><span class="o-sub">— ${esc(n.sub)}</span>`;
+  if (!kids.length) return `<details><summary class="leaf-s" data-oid="${id}">${head}</summary></details>`;
+  return `<details ${depth < 1 ? 'open' : ''}><summary data-oid="${id}">${head}</summary>${kids.map((k) => outlineNode(k, depth + 1)).join('')}</details>`;
+}
+$('#outline').innerHTML = `<div style="display:flex;gap:.5rem;margin-bottom:.6rem"><button class="btn" id="ex-all">Expand all</button><button class="btn" id="co-all">Collapse all</button></div>` + outlineNode('root', 0);
+$('#outline').addEventListener('click', (e) => {
+  const s = e.target.closest('summary[data-oid]');
+  if (s) { selected = s.dataset.oid; renderPanel(); }
+});
+$('#ex-all').onclick = () => document.querySelectorAll('#outline details').forEach((d) => (d.open = true));
+$('#co-all').onclick = () => document.querySelectorAll('#outline details').forEach((d, i) => (d.open = i === 0));
+
+function setView(v) {
+  document.body.classList.toggle('mode-outline', v === 'outline');
+  $('#v-graph').classList.toggle('on', v === 'graph');
+  $('#v-outline').classList.toggle('on', v === 'outline');
+  $('#v-graph').setAttribute('aria-selected', v === 'graph');
+  $('#v-outline').setAttribute('aria-selected', v === 'outline');
+  if (v === 'graph') render();
+}
+$('#v-graph').onclick = () => setView('graph');
+$('#v-outline').onclick = () => setView('outline');
+
+/* Theme toggle (remembers choice when storage is available) */
+function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
+try { applyTheme(localStorage.getItem('tc-theme')); } catch { /* storage blocked */ }
+$('#theme').onclick = () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+  const next = dark ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('tc-theme', next); } catch { /* ignore */ }
+};
+
+/* Deep links: how-it-works.html#ai-stats */
+const start = location.hash.slice(1);
+if (start && N[start]) jumpTo(start); else render('enter');
+window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (N[id] && id !== selected) jumpTo(id); });
+</script>
+</body>
+</html>
