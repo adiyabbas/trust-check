@@ -7,33 +7,33 @@
 <meta name="description" content="Interactive, drill-down explanation of how TrustCheck AI works: scam check, AI-writing check, rules, scoring, LLM layer, API and UI." />
 <style>
 :root {
-  --bg: #f5f7fb;
+  --bg: #fcf7f8;
   --surface: #ffffff;
-  --surface-2: #eef1f8;
-  --text: #141821;
-  --muted: #5f687a;
-  --border: #dde2ec;
-  --primary: #2f5bea;
-  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.07);
-  --k-actor: #0e9f6e;  --k-ui: #2f5bea;  --k-api: #0891b2;  --k-engine: #d97706;
-  --k-ai: #7c3aed;     --k-llm: #db2777; --k-data: #475569; --k-link: #ea580c;
-  --high: #d93838; --medium: #d98a0b; --low: #1f9d55;
+  --surface-2: #f8ecef;
+  --text: #191214;
+  --muted: #6e5e64;
+  --border: #ebd8dc;
+  --primary: #2563eb;
+  --shadow: 0 1px 2px rgba(40,16,24,.05), 0 8px 24px rgba(40,16,24,.07);
+  --k-actor: #0e9f6e;  --k-ui: #2563eb;  --k-api: #0891b2;  --k-engine: #d97706;
+  --k-ai: #1d4ed8;     --k-llm: #7c3aed; --k-data: #475569; --k-link: #ea580c;
+  --high: #dc2626; --medium: #d97706; --low: #16a34a;
   --radius: 14px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1017; --surface: #151a23; --surface-2: #1d2330; --text: #e7eaf1; --muted: #9aa3b5;
-    --border: #2a3140; --primary: #7c9bff; --shadow: 0 1px 2px rgba(0,0,0,.4);
-    --k-actor: #34d399; --k-ui: #7c9bff; --k-api: #22d3ee; --k-engine: #fbbf24;
-    --k-ai: #a78bfa; --k-llm: #f472b6; --k-data: #94a3b8; --k-link: #fb923c;
+    --bg: #120b0d; --surface: #1a1013; --surface-2: #25171c; --text: #faedf0; --muted: #a8949a;
+    --border: #3b232a; --primary: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --k-actor: #34d399; --k-ui: #60a5fa; --k-api: #22d3ee; --k-engine: #fbbf24;
+    --k-ai: #60a5fa; --k-llm: #a78bfa; --k-data: #94a3b8; --k-link: #fb923c;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0d1017; --surface: #151a23; --surface-2: #1d2330; --text: #e7eaf1; --muted: #9aa3b5;
-  --border: #2a3140; --primary: #7c9bff; --shadow: 0 1px 2px rgba(0,0,0,.4);
-  --k-actor: #34d399; --k-ui: #7c9bff; --k-api: #22d3ee; --k-engine: #fbbf24;
-  --k-ai: #a78bfa; --k-llm: #f472b6; --k-data: #94a3b8; --k-link: #fb923c;
+  --bg: #120b0d; --surface: #1a1013; --surface-2: #25171c; --text: #faedf0; --muted: #a8949a;
+  --border: #3b232a; --primary: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --k-actor: #34d399; --k-ui: #60a5fa; --k-api: #22d3ee; --k-engine: #fbbf24;
+  --k-ai: #60a5fa; --k-llm: #a78bfa; --k-data: #94a3b8; --k-link: #fb923c;
 }
 
 * { box-sizing: border-box; }
